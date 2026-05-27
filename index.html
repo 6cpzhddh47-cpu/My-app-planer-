@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#1a1a2e">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Planner">
+  <link rel="manifest" href="manifest.json">
+  <link rel="apple-touch-icon" href="icon-192.png">
+  <link rel="stylesheet" href="style.css">
+  <title>Daily Planner</title>
+</head>
+<body>
+  <div id="app">
+    <div id="screen-today" class="screen active">
+      <header>
+        <div class="date-block">
+          <span id="day-name">Загрузка...</span>
+          <span id="date-str"></span>
+        </div>
+        <div class="progress-block">
+          <div class="progress-bar">
+            <div class="progress-fill" id="progress-fill"></div>
+          </div>
+          <span id="progress-text">0 / 0</span>
+        </div>
+      </header>
+
+      <main id="task-list">
+        <div class="loading">Загружаем план...</div>
+      </main>
+
+      <nav>
+        <button class="nav-btn active" onclick="showScreen('today')">📋 План</button>
+        <button class="nav-btn" onclick="showScreen('stats')">📊 Статистика</button>
+      </nav>
+    </div>
+
+    <div id="screen-stats" class="screen">
+      <header>
+        <div class="date-block">
+          <span>Статистика</span>
+        </div>
+      </header>
+      <main id="stats-content">
+        <div class="loading">Загружаем статистику...</div>
+      </main>
+      <nav>
+        <button class="nav-btn" onclick="showScreen('today')">📋 План</button>
+        <button class="nav-btn active" onclick="showScreen('stats')">📊 Статистика</button>
+      </nav>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
