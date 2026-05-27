@@ -1,7 +1,7 @@
-const WEBHOOK_URL         = 'YOUR_N8N_WEBHOOK_URL';
-const WEBHOOK_CREATE_PLAN = 'https://klmkfkg.app.n8n.cloud/webhook-test/create-plan;
-const WEBHOOK_ADD_TASK    = 'YOUR_N8N_ADD_TASK_WEBHOOK';
-const SHEETS_ID           = '1-pTr898GCpypjWiNADyDnpotlWYHy75AiEMjFlWJicQ ;
+const WEBHOOK_URL = '';
+const WEBHOOK_CREATE_PLAN = 'https://klmkfkg.app.n8n.cloud/webhook-test/create-plan';
+const WEBHOOK_ADD_TASK = '';
+const SHEETS_ID = '1-pTt898GCpypjWiNADyDnpotlWrYh75AiEMjFlWJicQ';
 
 // ─── ВСТРОЕННЫЕ SUBTYPES ───────────────────────────────────────────────────
 const DEFAULT_SUBTYPES = [
