@@ -2,6 +2,12 @@ const WEBHOOK_URL = '';
 const WEBHOOK_CREATE_PLAN = 'https://klmkfkg.app.n8n.cloud/webhook/create-plan';
 const WEBHOOK_ADD_TASK = '';
 const SHEETS_ID = '1-pTt898GCpypjWiNADyDnpotlWrYh75AiEMjFlWJicQ';
+function getLocalDate() {
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, '0');
+  const day = String(now.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
 
 // ─── ВСТРОЕННЫЕ SUBTYPES ───────────────────────────────────────────────────
 const DEFAULT_SUBTYPES = [
@@ -239,28 +245,138 @@ async function createPlan() {
     btn.dataset.clicked = 'true';
     btn.innerHTML = '<span class="spinner"></span> Создаём план...';
     btn.disabled = true;
+
     try {
-      await fetch(WEBHOOK_CREATE_PLAN, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'create_plan', date: new Date().toISOString().split('T')[0] })
+      // Шаг 1: читаем Tasks из таблицы
+      const url = `https://docs.google.com/spreadsheets/d/${SHEETS_ID}/gviz/tq?tqx=out:csv&sheet=Tasks&cachebust=${Date.now()}`;
+      const res = await fetch(url, { cache: 'no-store' });
+      const text = await res.text();
+
+      if (text.trim().startsWith('<')) {
+        btn.innerHTML = '⚠️ Нет доступа к таблице';
+        btn.disabled = false;
+        return;
+      }
+
+      const tasks = parseCSV(text);
+      const today = getLocalDate();
+
+      // Шаг 2: считаем urgency прямо в браузере
+      const dayKeys = ['sun','mon','tue','wed','thu','fri','sat'];
+      const todayKey = dayKeys[new Date().getDay()];
+      const isWeekend = todayKey === 'sat' || todayKey === 'sun';
+      const maxTasks = isWeekend ? 3 : 5;
+
+      const langTypeByDay = {
+        mon: 'speaking', tue: 'listening',
+        wed: 'reading', thu: 'writing',
+        fri: null, sat: null, sun: null
+      };
+      const todayLangType = langTypeByDay[todayKey];
+
+      function daysSince(dateStr) {
+        if (!dateStr) return 999;
+        const d = new Date(dateStr + 'T12:00:00');
+        const t = new Date(today + 'T12:00:00');
+        return Math.floor((t - d) / (1000 * 60 * 60 * 24));
+      }
+
+      function calcPct(days, maxGap) {
+        return Math.round(100 * Math.exp(-days / (maxGap / 3)));
+      }
+
+      const activeTasks = tasks.filter(t => t.status === 'active');
+      const languages = activeTasks.filter(t => t.subtype === 'language');
+      const others = activeTasks.filter(t => t.subtype !== 'language');
+
+      const results = [];
+
+      // Выбираем один язык
+      const langScored = languages.map(row => {
+        let selectedType = todayLangType;
+        if (!selectedType) {
+          const types = ['speaking','listening','reading','writing'];
+          let maxD = -1;
+          types.forEach(t => {
+            const d = daysSince(row[`last_done_${t}`]);
+            if (d > maxD) { maxD = d; selectedType = t; }
+          });
+        }
+        const days = daysSince(row[`last_done_${selectedType}`]);
+        const pct = calcPct(days, parseInt(row.max_gap_days) || 5);
+        const urgency = (100 - Math.max(0, pct)) + (parseInt(row.priority) || 1) * 10;
+        return { ...row, selected_type: selectedType, percent: pct, urgency_score: urgency };
       });
+
+      langScored.sort((a, b) => b.urgency_score - a.urgency_score);
+      if (langScored[0]) results.push(langScored[0]);
+
+      // Остальные задачи
+      const otherScored = others
+        .filter(row => {
+          if (isWeekend && row.weekend_mode === 'skip') return false;
+          const pref = row.preferred_days || 'any';
+          if (pref !== 'any' && !pref.split(',').includes(todayKey)) return false;
+          return true;
+        })
+        .map(row => {
+          const days = daysSince(row.last_done_date);
+          const pct = calcPct(days, parseInt(row.max_gap_days) || 30);
+          const urgency = (100 - Math.max(0, pct)) + (parseInt(row.priority) || 1) * 10;
+          return { ...row, selected_type: '', percent: pct, urgency_score: urgency };
+        })
+        .sort((a, b) => b.urgency_score - a.urgency_score);
+
+      const catCounts = {};
+      for (const t of otherScored) {
+        catCounts[t.category] = (catCounts[t.category] || 0) + 1;
+        if (catCounts[t.category] <= 2) results.push(t);
+        if (results.length >= maxTasks) break;
+      }
+
+      // Шаг 3: записываем в DailyPlans через Apps Script
+      const newRows = results.map(t => ({
+        plan_id: `${today}_${t.id}`,
+        plan_date: today,
+        task_id: t.id,
+        task_name: t.task_name,
+        category: t.category,
+        subtype: t.subtype,
+        selected_type: t.selected_type,
+        is_weekend_mode: isWeekend ? 'TRUE' : 'FALSE',
+        percent_at_planning: t.percent,
+        urgency_score: t.urgency_score,
+        plan_status: 'planned',
+        completed_at: ''
+      }));
+
+      await fetch(APPS_SCRIPT_URL, {
+        method: 'POST',
+        mode: 'no-cors',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'create_plan_rows', rows: newRows })
+      });
+
+      // Добавляем в локальный state сразу
+      state.allPlans.push(...newRows);
+
       btn.innerHTML = '⏳ Готово — нажми ещё раз';
       btn.disabled = false;
-    } catch {
-      btn.innerHTML = '⚠️ Ошибка. Нажми ещё раз';
+
+    } catch (e) {
+      btn.innerHTML = `⚠️ Ошибка: ${e.message}`;
       btn.disabled = false;
       btn.dataset.clicked = 'false';
     }
     return;
   }
 
+  // Второе нажатие — просто рендерим из state
   btn.innerHTML = '<span class="spinner"></span> Загружаем...';
   btn.disabled = true;
-  await new Promise(r => setTimeout(r, 2000));
+  await new Promise(r => setTimeout(r, 1500));
   await loadAllData();
 }
-
 // ─── MARK TASK ─────────────────────────────────────────────────────────────
 async function markTask(planId, taskId, status) {
   const task = state.tasks.find(t => t.plan_id === planId);
@@ -539,22 +655,49 @@ function showScreen(name) {
 
 // ─── CSV PARSER ────────────────────────────────────────────────────────────
 function parseCSV(text) {
-  // ИСПРАВЛЕНИЕ БАГ 1: убираем \r\n и \r
   const normalized = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
   const lines = normalized.trim().split('\n');
+
   if (lines.length < 2) return [];
-  const headers = lines[0].split(',').map(h => h.replace(/"/g, '').trim());
+
+  const headers = parseCSVLine(lines[0]).map(h => h.trim());
+
   return lines.slice(1)
+    .filter(line => line.trim() !== '')
     .map(line => {
-      const vals = line.match(/(".*?"|[^,\n]+)(?=,|$)/g) || [];
+      const vals = parseCSVLine(line);
       const obj = {};
+
       headers.forEach((h, i) => {
-        obj[h] = (vals[i] || '').replace(/"/g, '').trim();
+        obj[h] = (vals[i] || '').trim();
       });
+
       return obj;
-    })
-    .filter(row => {
-      const date = row.plan_date || '';
-      return date.match(/^\d{4}-\d{2}-\d{2}$/);
     });
+}
+
+function parseCSVLine(line) {
+  const result = [];
+  let current = '';
+  let insideQuotes = false;
+
+  for (let i = 0; i < line.length; i++) {
+    const char = line[i];
+    const nextChar = line[i + 1];
+
+    if (char === '"' && insideQuotes && nextChar === '"') {
+      current += '"';
+      i++;
+    } else if (char === '"') {
+      insideQuotes = !insideQuotes;
+    } else if (char === ',' && !insideQuotes) {
+      result.push(current);
+      current = '';
+    } else {
+      current += char;
+    }
+  }
+
+  result.push(current);
+  return result;
 }
