@@ -40,16 +40,33 @@ function updateDateTime() {
 
 // ─── ЗАГРУЗКА ДАННЫХ ───────────────────────────────────────────────────────
 async function loadAllData() {
+  const main = document.getElementById('task-list');
   try {
     const url = `https://docs.google.com/spreadsheets/d/${SHEETS_ID}/gviz/tq?tqx=out:csv&sheet=DailyPlans`;
-    const res  = await fetch(url);
+    
+    const res = await fetch(url);
+    
+    if (!res.ok) {
+      main.innerHTML = `<div class="loading">Ошибка ${res.status}: не удалось загрузить таблицу</div>`;
+      return;
+    }
+    
     const text = await res.text();
+    
+    // Показываем первые 200 символов для отладки
+    main.innerHTML = `<div class="loading" style="font-size:11px;text-align:left;word-break:break-all">Получено: ${text.substring(0, 300)}</div>`;
+    
     state.allPlans = parseCSV(text);
+    
+    // Показываем сколько строк нашли
+    setTimeout(() => {
+      main.innerHTML = `<div class="loading">Найдено строк: ${state.allPlans.length}<br>Сегодня: ${new Date().toISOString().split('T')[0]}<br>Строк сегодня: ${state.allPlans.filter(r => r.plan_date === new Date().toISOString().split('T')[0]).length}</div>`;
+      setTimeout(() => renderCurrentView(), 2000);
+    }, 2000);
+    
   } catch (e) {
-    state.allPlans = [];
+    main.innerHTML = `<div class="loading">Ошибка: ${e.message}</div>`;
   }
-  renderCurrentView();
-}
 
 // ─── VIEW ROUTER ───────────────────────────────────────────────────────────
 function setView(view) {
