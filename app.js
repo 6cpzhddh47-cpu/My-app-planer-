@@ -42,30 +42,53 @@ function updateDateTime() {
 async function loadAllData() {
   const main = document.getElementById('task-list');
   try {
-    const url = `https://docs.google.com/spreadsheets/d/${SHEETS_ID}/gviz/tq?tqx=out:csv&sheet=DailyPlans`;
-    
-    const res = await fetch(url);
-    
-    if (!res.ok) {
-      main.innerHTML = `<div class="loading">Ошибка ${res.status}: не удалось загрузить таблицу</div>`;
+    const url = `https://docs.google.com/spreadsheets/d/${SHEETS_ID}/gviz/tq?tqx=out:csv&sheet=DailyPlans&cachebust=${Date.now()}`;
+    const res = await fetch(url, { cache: 'no-store' });
+
+    // ИСПРАВЛЕНИЕ БАГ 2: проверяем что получили CSV, а не HTML
+    const text = await res.text();
+
+    if (text.trim().startsWith('<') || text.includes('<!DOCTYPE')) {
+      main.innerHTML = `
+        <div class="loading">
+          ⚠️ Нет доступа к таблице.<br><br>
+          Открой Google Sheets →<br>
+          Поделиться → Все у кого есть ссылка → Читатель
+        </div>`;
       return;
     }
-    
-    const text = await res.text();
-    
-    // Показываем первые 200 символов для отладки
-    main.innerHTML = `<div class="loading" style="font-size:11px;text-align:left;word-break:break-all">Получено: ${text.substring(0, 300)}</div>`;
-    
+
+    if (!res.ok) {
+      main.innerHTML = `
+        <div class="loading">
+          ❌ Ошибка ${res.status}<br>
+          Проверь SHEETS_ID в app.js
+        </div>`;
+      return;
+    }
+
     state.allPlans = parseCSV(text);
-    
-    // Показываем сколько строк нашли
-    setTimeout(() => {
-      main.innerHTML = `<div class="loading">Найдено строк: ${state.allPlans.length}<br>Сегодня: ${new Date().toISOString().split('T')[0]}<br>Строк сегодня: ${state.allPlans.filter(r => r.plan_date === new Date().toISOString().split('T')[0]).length}</div>`;
-      setTimeout(() => renderCurrentView(), 2000);
-    }, 2000);
-    
+
+    // Проверяем что данные реально распарсились
+    if (state.allPlans.length === 0 && text.includes('plan_id')) {
+      main.innerHTML = `
+        <div class="loading">
+          ⚠️ Таблица пустая или нет плана на сегодня.<br>
+          Нажми + чтобы создать план вручную.
+        </div>`;
+      // Всё равно рендерим — покажет кнопку создания
+    }
+
+    renderCurrentView();
+
   } catch (e) {
-    main.innerHTML = `<div class="loading">Ошибка: ${e.message}</div>`;
+    // ИСПРАВЛЕНИЕ БАГ 2: показываем реальную ошибку
+    main.innerHTML = `
+      <div class="loading">
+        ❌ Ошибка загрузки:<br>${e.message}<br><br>
+        Проверь интернет-соединение<br>
+        и доступ к таблице.
+      </div>`;
   }
 
 // ─── VIEW ROUTER ───────────────────────────────────────────────────────────
@@ -516,11 +539,11 @@ function showScreen(name) {
 
 // ─── CSV PARSER ────────────────────────────────────────────────────────────
 function parseCSV(text) {
-  const lines = text.trim().split('\n');
+  // ИСПРАВЛЕНИЕ БАГ 1: убираем \r\n и \r
+  const normalized = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+  const lines = normalized.trim().split('\n');
   if (lines.length < 2) return [];
-  
   const headers = lines[0].split(',').map(h => h.replace(/"/g, '').trim());
-  
   return lines.slice(1)
     .map(line => {
       const vals = line.match(/(".*?"|[^,\n]+)(?=,|$)/g) || [];
@@ -530,8 +553,8 @@ function parseCSV(text) {
       });
       return obj;
     })
-    // Фильтруем мусорные строки — только реальные данные
     .filter(row => {
       const date = row.plan_date || '';
       return date.match(/^\d{4}-\d{2}-\d{2}$/);
     });
+}
