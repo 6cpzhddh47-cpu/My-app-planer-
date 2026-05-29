@@ -13,14 +13,16 @@
   <title>Daily Planner</title>
 </head>
 <body>
+
 <div id="app">
 
   <!-- ЭКРАН: ПЛАН -->
   <div id="screen-today" class="screen active">
+
     <header>
       <div class="header-row">
         <div class="date-block">
-          <span id="day-name">Загрузка...</span>
+          <span id="day-name"></span>
           <span id="date-str"></span>
         </div>
         <button class="add-btn" onclick="openAddModal()">+</button>
@@ -39,38 +41,53 @@
       <button class="view-tab"        data-view="month" onclick="setView('month')">Месяц</button>
     </div>
 
-    <main id="task-list"></main>
+    <main id="task-list">
+      <div class="loading">Загружаем план...</div>
+    </main>
 
     <nav>
       <button class="nav-btn active" onclick="showScreen('today')">📋 План</button>
       <button class="nav-btn"        onclick="showScreen('stats')">📊 Статистика</button>
     </nav>
+
   </div>
 
   <!-- ЭКРАН: СТАТИСТИКА -->
   <div id="screen-stats" class="screen">
+
     <header>
       <div class="header-row">
-        <div class="date-block"><span>Статистика</span></div>
+        <div class="date-block">
+          <span>Статистика</span>
+        </div>
       </div>
     </header>
-    <main id="stats-content"><div class="loading">Загружаем...</div></main>
+
+    <main id="stats-content">
+      <div class="loading">Загружаем...</div>
+    </main>
+
     <nav>
       <button class="nav-btn"        onclick="showScreen('today')">📋 План</button>
       <button class="nav-btn active" onclick="showScreen('stats')">📊 Статистика</button>
     </nav>
+
   </div>
 
 </div>
 
-<!-- МОДАЛКА ДОБАВЛЕНИЯ ЗАДАЧИ -->
+<!-- МОДАЛКА -->
 <div id="modal-overlay" class="modal-overlay" onclick="handleOverlayClick(event)"></div>
 
 <script>
-function handleOverlayClick(e) {
-  if (e.target === document.getElementById('modal-overlay')) closeModal();
-}
+  function handleOverlayClick(e) {
+    if (e.target === document.getElementById('modal-overlay')) {
+      closeModal();
+    }
+  }
 </script>
+
 <script src="app.js"></script>
+
 </body>
 </html>
