@@ -76,55 +76,34 @@ async function loadAllData() {
   const main = document.getElementById('task-list');
 
   try {
-    if (main) {
-      main.innerHTML = '<div class="loading">Загрузка плана...</div>';
-    }
-
     const url = `https://docs.google.com/spreadsheets/d/${SHEETS_ID}/gviz/tq?tqx=out:csv&sheet=DailyPlans&cachebust=${Date.now()}`;
+
     const res = await fetch(url, { cache: 'no-store' });
     const text = await res.text();
 
-    if (text.includes('<html') || text.includes('<!DOCTYPE html>')) {
-      if (main) {
-        main.innerHTML = `
-          <div class="loading">
-            ⚠️ Таблица не отдала CSV.<br><br>
-            Проверь SHEETS_ID, название листа DailyPlans и доступ "Читатель".
-          </div>`;
-      }
-      return;
-    }
-
-    if (!res.ok) {
-      if (main) {
-        main.innerHTML = `<div class="loading">❌ Ошибка ${res.status}</div>`;
-      }
+    // Таблица вернула HTML вместо CSV
+    if (text.includes('<html') || text.includes('<!DOCTYPE')) {
+      if (main) main.innerHTML = `
+        <div class="loading">
+          ⚠️ Нет доступа к таблице.<br><br>
+          Открой Google Sheets →<br>
+          Поделиться → Все у кого есть ссылка → Читатель
+        </div>`;
       return;
     }
 
     state.allPlans = parseCSV(text);
+
+    // Таблица пустая — сразу рендерим (покажет кнопку создания)
     renderCurrentView();
 
   } catch (e) {
-    if (main) {
-      main.innerHTML = `
-        <div class="loading">
-          ❌ Ошибка загрузки:<br>${e.message}
-        </div>`;
-    }
+    if (main) main.innerHTML = `
+      <div class="loading">
+        ❌ Ошибка: ${e.message}
+      </div>`;
   }
 }
-
-function setView(view) {
-  state.currentView = view;
-  state.calendarOffset = 0;
-
-  document.querySelectorAll('.view-tab').forEach(btn => {
-    btn.classList.remove('active');
-  });
-
-  const activeBtn = document.querySelector(`.view-tab[data-view="${view}"]`);
-  if (activeBtn) activeBtn.classList.add('active');
 
   renderCurrentView();
 }
